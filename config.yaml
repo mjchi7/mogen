@@ -1,2 +1,11 @@
 host: localhost
 port: 27017
+fields:
+  - generator: name
+    name: fullName
+    data:
+      numberOfWords: 3
+  - generator: bool
+    name: isActive
+    data:
+      trueWeight: 95

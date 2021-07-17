@@ -51,7 +51,10 @@ func main() {
 	path := "./config.yaml"
 
 	raw := readFile(path)
-	config := config.Parse(raw)
+	config, err := config.Parse(raw)
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Println(config)
 }
