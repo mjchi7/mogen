@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"mjchi7/mogen/config"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -47,9 +49,26 @@ func verifyConn(ctx context.Context, c *mongo.Client) error {
 	return err
 }
 
+func generateBool(field config.Field, nrows uint64) []bool {
+	// TODO: Generate based on trueWeight
+	truePct := int64(field.Data["trueWeight"].(int))
+	data := []bool{}
+	for i := uint64(0); i < nrows; i++ {
+		random := rand.Int63n(100)
+		if random < truePct {
+			data = append(data, true)
+		} else {
+			data = append(data, false)
+		}
+	}
+	return data
+}
+
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	path := "./config.yaml"
 
+	nrows := uint64(20000)
 	raw := readFile(path)
 	config, err := config.Parse(raw)
 	if len(err) != 0 {
@@ -59,6 +78,31 @@ func main() {
 		}
 		panic("Exit")
 	}
+	dataInsert := []interface{}{}
+	for _, field := range config.Fields {
+		if field.Generator == "bool" {
+			bools := generateBool(field, nrows)
+			validateBoolPct(bools)
+			dataInsert = append(dataInsert, bools)
+		}
+	}
+}
 
-	fmt.Println(config)
+func validateBoolPct(data []bool) {
+	total := len(data)
+	nTrue := 0
+	nFalse := 0
+	for _, d := range data {
+		if d {
+			nTrue++
+		} else {
+			nFalse++
+		}
+	}
+
+	truePct := (float64(nTrue) / float64(total)) * 100
+	fmt.Println("Total in slices: " + strconv.Itoa(total))
+	fmt.Println("Number of true: " + strconv.Itoa(nTrue))
+	fmt.Println("Number of false: " + strconv.Itoa(nFalse))
+	fmt.Println("Percentage of true: " + strconv.FormatFloat(truePct, 'f', 2, 64))
 }
