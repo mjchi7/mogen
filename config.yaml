@@ -8,4 +8,4 @@ fields:
   - generator: bool
     name: isActive
     data:
-      trueWeight: 95
+      trueWeight: 69

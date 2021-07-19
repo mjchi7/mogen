@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -59,6 +61,7 @@ func (f *Field) verifyBool() error {
 		return &err
 	}
 
+	fmt.Println(valInt)
 	if valInt < 0 || valInt > 100 {
 		err := ValidationError{message: "trueWeight must be an integer of range 0 - 100"}
 		return &err
@@ -66,20 +69,25 @@ func (f *Field) verifyBool() error {
 	return nil
 }
 
-func Parse(raw string) (Config, error) {
+func Parse(raw string) (Config, []error) {
 	config := Config{}
 	err := yaml.Unmarshal([]byte(raw), &config)
 	if err != nil {
 		panic(err)
 	}
+	validationErrors := []error{}
 	for _, field := range config.Fields {
+		var err error
 		if field.Generator == "name" {
-			field.verifyName()
+			err = field.verifyName()
 		} else if field.Generator == "bool" {
-			field.verifyBool()
+			err = field.verifyBool()
 		} else {
-			return config, &ValidationError{message: "Generator '" + field.Generator + "' is invalid"}
+			err = &ValidationError{message: "Generator '" + field.Generator + "' is invalid"}
+		}
+		if err != nil {
+			validationErrors = append(validationErrors, err)
 		}
 	}
-	return config, nil
+	return config, validationErrors
 }

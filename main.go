@@ -52,8 +52,12 @@ func main() {
 
 	raw := readFile(path)
 	config, err := config.Parse(raw)
-	if err != nil {
-		panic(err)
+	if len(err) != 0 {
+		fmt.Println("Validation error")
+		for _, err := range err {
+			fmt.Println(err)
+		}
+		panic("Exit")
 	}
 
 	fmt.Println(config)
