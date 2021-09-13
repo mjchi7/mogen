@@ -1,11 +1,16 @@
 host: localhost
-port: 27017
+dbName: streaming
+collectionName: outletProjection
 fields:
   - generator: name
-    name: fullName
+    name: firstName
+    data:
+      numberOfWords: 3
+  - generator: name
+    name: lastName
     data:
       numberOfWords: 3
   - generator: bool
     name: isActive
     data:
-      trueWeight: 69
+      trueWeight: 98
