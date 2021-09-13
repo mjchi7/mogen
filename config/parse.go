@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"mjchi7/mogen/generator"
 
 	"gopkg.in/yaml.v2"
 )
@@ -21,6 +22,7 @@ type Config struct {
 	DbName         string  `yaml:"dbName"`
 	CollectionName string  `yaml:"collectionName"`
 	Fields         []Field `yaml:"fields"`
+	Generators     []generator.Generator
 }
 
 type Field struct {
@@ -32,17 +34,20 @@ type Field struct {
 // Name generator
 // Data required:
 // 	numberOfWords
-func (f *Field) verifyName() error {
+func (f *Field) parseName() (error, generator.Generator) {
 	if f.Name == "" {
 		err := ValidationError{message: "name cannot be empty"}
-		return &err
+		return &err, nil
 	}
 	_, ok := f.Data["numberOfWords"]
 	if !ok {
 		err := ValidationError{message: "data.numberOfWords cannot be empty"}
-		return &err
+		return &err, nil
 	}
-	return nil
+	return nil, &generator.NameGenerator{
+		NumberOfWords: f.Data["numberOfWords"].(int),
+		ColumnName:    f.Name,
+	}
 }
 
 // Boolean generator
