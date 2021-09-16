@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -14,11 +13,30 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.uber.org/zap"
 )
 
+var logger *zap.Logger
+
+func init() {
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+}
+
 func readFile(path string) string {
+	logger.Info(
+		"Reading config file",
+		zap.String("path", path),
+	)
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
+		logger.Error(
+			"Error reading config file",
+			zap.String("msg", err.Error()),
+		)
 		panic(err)
 	}
 	return string(data)
@@ -32,7 +50,10 @@ func buildConn(ctx context.Context, host string, port string, tlsEnabled bool, d
 		InsecureSkipVerify: true,
 	}
 	uri := "mongodb://" + host + ":" + port + "/" + databaseName
-	log.Printf("Mongo uri: %v", uri)
+	logger.Info(
+		"Mongo URI Built",
+		zap.String("uri", uri),
+	)
 	mongoConfig := options.Client().ApplyURI(uri).SetMaxPoolSize(maxPoolSize).SetDirect(true)
 	if tlsEnabled {
 		uri = uri + "/?tls=true"
@@ -40,6 +61,10 @@ func buildConn(ctx context.Context, host string, port string, tlsEnabled bool, d
 	}
 	conn, err := mongo.Connect(ctx, mongoConfig)
 	if err != nil {
+		logger.Error(
+			"Error connecting to mongoDb",
+			zap.String("msg", err.Error()),
+		)
 		panic(err)
 	}
 	return conn
@@ -56,15 +81,21 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	path := "./config.yaml"
 
-	log.Printf("Initializing")
+	logger.Info("Initializing")
 	nrows := uint64(2000000)
-	log.Printf("nrows %v", nrows)
+	logger.Info(
+		"Obtained nrows: "+string(nrows),
+		zap.Uint64("nrows", nrows),
+	)
 	raw := readFile(path)
 	cnf, err := config.Parse(raw)
 	if len(err) != 0 {
-		fmt.Println("Validation error")
-		for _, err := range err {
-			fmt.Println(err)
+		logger.Error("Config Validation error")
+		for i, err := range err {
+			logger.Error(
+				"Error "+string(i),
+				zap.String("msg", err.Error()),
+			)
 		}
 		panic("Exit")
 	}
@@ -77,7 +108,7 @@ func main() {
 		data = append(data, rowdata)
 	}
 
-	log.Printf("Size of mongoData: %v", len(data))
+	logger.Info("Mongo Data generated.", zap.Int("size", len(data)))
 	// build connection and get collection
 	ctx, cancelConn := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelConn()
@@ -96,7 +127,7 @@ func main() {
 	if insertErr != nil {
 		panic(insertErr)
 	}
-	log.Printf("Total documents inserted: %v", len(insertResult.InsertedIDs))
+	logger.Info("Insert successful", zap.Int("length", len(insertResult.InsertedIDs)))
 
 	dcErr := conn.Disconnect(context.TODO())
 	if dcErr != nil {
