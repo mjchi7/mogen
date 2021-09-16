@@ -53,28 +53,31 @@ func (f *Field) parseName() (error, generator.Generator) {
 // Boolean generator
 // Data required:
 // 	trueWeight
-func (f *Field) verifyBool() error {
+func (f *Field) parseBool() (error, generator.Generator) {
 	if f.Name == "" {
 		err := ValidationError{message: "name cannot be empty"}
-		return &err
+		return &err, nil
 	}
 	val, ok := f.Data["trueWeight"]
 	if !ok {
 		err := ValidationError{message: "data.trueWeight cannot be empty"}
-		return &err
+		return &err, nil
 	}
 	valInt, ok := val.(int)
 	if !ok {
 		err := ValidationError{message: "trueWeight must be an integer of range 0 - 100"}
-		return &err
+		return &err, nil
 	}
 
 	fmt.Println(valInt)
 	if valInt < 0 || valInt > 100 {
 		err := ValidationError{message: "trueWeight must be an integer of range 0 - 100"}
-		return &err
+		return &err, nil
 	}
-	return nil
+	return nil, &generator.BoolGenerator{
+		ColumnName: f.Name,
+		TrueWeight: f.Data["trueWeight"].(int),
+	}
 }
 
 func Parse(raw string) (Config, []error) {
@@ -100,18 +103,26 @@ func Parse(raw string) (Config, []error) {
 		config.CollectionName = "mogenDocuments"
 	}
 	validationErrors := []error{}
+	config.Generators = []generator.Generator{}
 	for _, field := range config.Fields {
 		var err error
-		if field.Generator == "name" {
-			err = field.verifyName()
-		} else if field.Generator == "bool" {
-			err = field.verifyBool()
-		} else {
+		var generator generator.Generator
+		switch field.Generator {
+		case "name":
+			err, generator = field.parseName()
+		case "bool":
+			err, generator = field.parseBool()
+		default:
 			err = &ValidationError{message: "Generator '" + field.Generator + "' is invalid"}
+		}
+
+		if generator != nil {
+			config.Generators = append(config.Generators, generator)
 		}
 		if err != nil {
 			validationErrors = append(validationErrors, err)
 		}
+
 	}
 	return config, validationErrors
 }

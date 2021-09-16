@@ -7,7 +7,8 @@ import (
 )
 
 type Generator interface {
-	Generate() bson.M
+	Generate() interface{}
+	Name() string
 }
 
 type BoolGenerator struct {
@@ -21,7 +22,7 @@ type NameGenerator struct {
 	Options       []string
 }
 
-func (g *BoolGenerator) Generate() bson.M {
+func (g *BoolGenerator) Generate() interface{} {
 	dice := rand.Intn(100)
 	var res bool
 	if dice < g.TrueWeight {
@@ -32,8 +33,16 @@ func (g *BoolGenerator) Generate() bson.M {
 	return bson.M{g.ColumnName: res}
 }
 
-func (g *NameGenerator) Generate() bson.M {
+func (g *BoolGenerator) Name() string {
+	return g.ColumnName
+}
+
+func (g *NameGenerator) Generate() interface{} {
 	totalOptionsCount := len(g.Options)
 	dice := rand.Intn(totalOptionsCount)
 	return bson.M{g.ColumnName: g.Options[dice]}
+}
+
+func (g *NameGenerator) Name() string {
+	return g.ColumnName
 }
