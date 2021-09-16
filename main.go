@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -84,7 +85,7 @@ func main() {
 	logger.Info("Initializing")
 	nrows := uint64(2000000)
 	logger.Info(
-		"Obtained nrows: "+string(nrows),
+		"Obtained nrows: "+fmt.Sprint(nrows),
 		zap.Uint64("nrows", nrows),
 	)
 	raw := readFile(path)
@@ -93,7 +94,7 @@ func main() {
 		logger.Error("Config Validation error")
 		for i, err := range err {
 			logger.Error(
-				"Error "+string(i),
+				"Error "+fmt.Sprint(i),
 				zap.String("msg", err.Error()),
 			)
 		}
