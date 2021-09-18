@@ -83,11 +83,7 @@ func main() {
 	path := "./config.yaml"
 
 	logger.Info("Initializing")
-	nrows := uint64(2000000)
-	logger.Info(
-		"Obtained nrows: "+fmt.Sprint(nrows),
-		zap.Uint64("nrows", nrows),
-	)
+
 	raw := readFile(path)
 	cnf, err := config.Parse(raw)
 	if len(err) != 0 {
@@ -101,7 +97,10 @@ func main() {
 		panic("Exit")
 	}
 	data := []interface{}{}
-	for i := uint64(0); i < nrows; i++ {
+	for i := uint64(0); i < uint64(cnf.NRows); i++ {
+		if i%500 == 0 {
+			logger.Info(fmt.Sprintf("Generating data. currently at: %d/%d", i, cnf.NRows))
+		}
 		rowdata := bson.M{}
 		for _, generator := range cnf.Generators {
 			rowdata[generator.Name()] = generator.Generate()

@@ -2,11 +2,21 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"mjchi7/mogen/generator"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
+
+var logger *zap.Logger
+
+func init() {
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+}
 
 type ValidationError struct {
 	message string
@@ -21,6 +31,7 @@ type Config struct {
 	Port           string  `yaml:"port"`
 	DbName         string  `yaml:"dbName"`
 	CollectionName string  `yaml:"collectionName"`
+	NRows          int     `yaml:"nRows"`
 	Fields         []Field `yaml:"fields"`
 	Generators     []generator.Generator
 }
@@ -39,15 +50,24 @@ func (f *Field) parseName() (error, generator.Generator) {
 		err := ValidationError{message: "name cannot be empty"}
 		return &err, nil
 	}
-	_, ok := f.Data["numberOfWords"]
+	options, ok := f.Data["options"]
 	if !ok {
-		err := ValidationError{message: "data.numberOfWords cannot be empty"}
+		err := ValidationError{message: "data.options cannot be empty"}
 		return &err, nil
 	}
+	optionsConverted := convertSliceOfInterfacesToSliceOfString(options.([]interface{}))
 	return nil, &generator.NameGenerator{
-		NumberOfWords: f.Data["numberOfWords"].(int),
-		ColumnName:    f.Name,
+		Options:    optionsConverted,
+		ColumnName: f.Name,
 	}
+}
+
+func convertSliceOfInterfacesToSliceOfString(interfaces []interface{}) []string {
+	result := []string{}
+	for _, inter := range interfaces {
+		result = append(result, inter.(string))
+	}
+	return result
 }
 
 // Boolean generator
@@ -87,20 +107,24 @@ func Parse(raw string) (Config, []error) {
 		panic(err)
 	}
 	if config.Host == "" {
-		log.Println("[WARN] No host information set. default to localhost")
+		logger.Warn("No host information set. default to localhost")
 		config.Host = "localhost"
 	}
 	if config.Port == "" {
-		log.Println("[WARN] No port information set. default to 27017")
+		logger.Warn("No port information set. default to 27017")
 		config.Port = "27017"
 	}
 	if config.DbName == "" {
-		log.Println("[WARN] No dbName information set. default to mogen")
+		logger.Warn("No dbName information set. default to mogen")
 		config.DbName = "mogen"
 	}
 	if config.CollectionName == "" {
-		log.Println("[WARN] No collectionName information set. default to mogenDocuments")
+		logger.Warn("No collectionName information set. default to mogenDocuments")
 		config.CollectionName = "mogenDocuments"
+	}
+	if config.NRows == 0 {
+		logger.Warn("No nRows configured. Default to 20_000")
+		config.NRows = 20_000
 	}
 	validationErrors := []error{}
 	config.Generators = []generator.Generator{}

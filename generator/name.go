@@ -2,8 +2,6 @@ package generator
 
 import (
 	"math/rand"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 type Generator interface {
@@ -17,9 +15,8 @@ type BoolGenerator struct {
 }
 
 type NameGenerator struct {
-	NumberOfWords int
-	ColumnName    string
-	Options       []string
+	ColumnName string
+	Options    []string
 }
 
 func (g *BoolGenerator) Generate() interface{} {
@@ -30,7 +27,7 @@ func (g *BoolGenerator) Generate() interface{} {
 	} else {
 		res = false
 	}
-	return bson.M{g.ColumnName: res}
+	return res
 }
 
 func (g *BoolGenerator) Name() string {
@@ -40,7 +37,7 @@ func (g *BoolGenerator) Name() string {
 func (g *NameGenerator) Generate() interface{} {
 	totalOptionsCount := len(g.Options)
 	dice := rand.Intn(totalOptionsCount)
-	return bson.M{g.ColumnName: g.Options[dice]}
+	return g.Options[dice]
 }
 
 func (g *NameGenerator) Name() string {

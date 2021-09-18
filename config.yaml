@@ -1,15 +1,32 @@
 host: localhost
-dbName: streaming
+dbName: mogen
 collectionName: outletProjection
+nRows: 60000
 fields:
   - generator: name
     name: firstName
     data:
-      numberOfWords: 3
+      options:
+        - "Andy"
+        - "Carol"
+        - "Steinsberg"
+        - "Kole"
+        - "Ken"
+        - "Kenny"
+        - "Tham"
+        - "Beatric"
   - generator: name
     name: lastName
     data:
-      numberOfWords: 3
+      options:
+        - "Andy"
+        - "Carol"
+        - "Steinsberg"
+        - "Kole"
+        - "Ken"
+        - "Kenny"
+        - "Tham"
+        - "Beatric"
   - generator: bool
     name: isActive
     data:
