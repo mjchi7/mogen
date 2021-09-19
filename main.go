@@ -8,6 +8,8 @@ import (
 	"log"
 	"math/rand"
 	"mjchi7/mogen/config"
+	"reflect"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -78,6 +80,73 @@ func verifyConn(ctx context.Context, c *mongo.Client) error {
 	return err
 }
 
+func batchGenerator(cnf *config.Config, ch chan []interface{}) {
+	// dice into batches
+	batchSize := 10_000
+	var batchCounts int
+	if cnf.NRows <= batchSize {
+		batchCounts = 1
+	} else {
+		batchCounts = cnf.NRows / batchSize
+		// add 1 to batchCounts if there's leftover
+		if cnf.NRows%batchSize != 0 {
+			batchCounts += 1
+		}
+	}
+
+	for batch := 0; batch < batchCounts; batch++ {
+		batchData := []interface{}{}
+		batchStartIdx := batch * batchSize
+		batchEndIdx := batchStartIdx + batchSize
+		for i := batchStartIdx; i < batchEndIdx; i++ {
+			rowData := bson.M{}
+			for _, generator := range cnf.Generators {
+				rowData[generator.Name()] = generator.Generate()
+			}
+			batchData = append(batchData, rowData)
+		}
+		ch <- batchData
+	}
+	close(ch)
+}
+
+// TODO: convert to limit maximum in queue worker to prevent memory from growing out of control
+func batchInserter(cnf *config.Config, conn *mongo.Client, ch chan []interface{}, done chan bool) {
+	var wg sync.WaitGroup
+	batchN := 0
+	for batchData := range ch {
+		logger.Info(
+			"Obtained data",
+			zap.Int("size", len(batchData)),
+			zap.String("dataType", reflect.TypeOf(batchData).String()),
+		)
+		wg.Add(1)
+		batchN++
+		go insertToMongo(&wg, cnf, conn, batchData, batchN)
+	}
+
+	wg.Wait()
+	done <- true
+}
+
+func insertToMongo(
+	wg *sync.WaitGroup,
+	cnf *config.Config,
+	conn *mongo.Client,
+	data []interface{},
+	batchN int,
+) {
+	collection := conn.Database(cnf.DbName).Collection(cnf.CollectionName)
+	ctx, cancelInsert := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancelInsert()
+	insertResult, insertErr := collection.InsertMany(ctx, data)
+	if insertErr != nil {
+		panic(insertErr)
+	}
+	logger.Info(fmt.Sprintf("Insert successful for batch %d", batchN), zap.Int("length", len(insertResult.InsertedIDs)))
+	wg.Done()
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	path := "./config.yaml"
@@ -96,19 +165,19 @@ func main() {
 		}
 		panic("Exit")
 	}
-	data := []interface{}{}
-	for i := uint64(0); i < uint64(cnf.NRows); i++ {
-		if i%500 == 0 {
-			logger.Info(fmt.Sprintf("Generating data. currently at: %d/%d", i, cnf.NRows))
+	/*
+		data := []interface{}{}
+		for i := uint64(0); i < uint64(cnf.NRows); i++ {
+			if i%500 == 0 {
+				logger.Info(fmt.Sprintf("Generating data. currently at: %d/%d", i, cnf.NRows))
+			}
+			rowdata := bson.M{}
+			for _, generator := range cnf.Generators {
+				rowdata[generator.Name()] = generator.Generate()
+			}
+			data = append(data, rowdata)
 		}
-		rowdata := bson.M{}
-		for _, generator := range cnf.Generators {
-			rowdata[generator.Name()] = generator.Generate()
-		}
-		data = append(data, rowdata)
-	}
-
-	logger.Info("Mongo Data generated.", zap.Int("size", len(data)))
+	*/
 	// build connection and get collection
 	ctx, cancelConn := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelConn()
@@ -119,18 +188,34 @@ func main() {
 	if connErr != nil {
 		panic(connErr)
 	}
-	// get collection
-	collection := conn.Database(cnf.DbName).Collection(cnf.CollectionName)
-	ctx, cancelInsert := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancelInsert()
-	insertResult, insertErr := collection.InsertMany(ctx, data)
-	if insertErr != nil {
-		panic(insertErr)
-	}
-	logger.Info("Insert successful", zap.Int("length", len(insertResult.InsertedIDs)))
 
-	dcErr := conn.Disconnect(context.TODO())
-	if dcErr != nil {
-		log.Fatal(err)
-	}
+	dataChannel := make(chan []interface{}, 30)
+	doneChannel := make(chan bool)
+
+	go batchGenerator(&cnf, dataChannel)
+	go batchInserter(&cnf, conn, dataChannel, doneChannel)
+
+	<-doneChannel
+	logger.Info(
+		"Data pump completed successfully. Terminating program",
+	)
+
+	/*
+		// get collection
+		collection := conn.Database(cnf.DbName).Collection(cnf.CollectionName)
+		ctx, cancelInsert := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancelInsert()
+		insertResult, insertErr := collection.InsertMany(ctx, data)
+		if insertErr != nil {
+			panic(insertErr)
+		}
+		logger.Info("Insert successful", zap.Int("length", len(insertResult.InsertedIDs)))
+	*/
+
+	defer func() {
+		dcErr := conn.Disconnect(context.TODO())
+		if dcErr != nil {
+			log.Fatal(err)
+		}
+	}()
 }

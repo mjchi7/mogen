@@ -1,7 +1,7 @@
 host: localhost
 dbName: mogen
 collectionName: outletProjection
-nRows: 60000
+nRows: 2000000
 fields:
   - generator: name
     name: firstName
