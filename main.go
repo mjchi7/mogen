@@ -111,7 +111,12 @@ func batchGenerator(cnf *config.Config, ch chan []interface{}) {
 }
 
 // TODO: convert to limit maximum in queue worker to prevent memory from growing out of control
-func batchInserter(cnf *config.Config, conn *mongo.Client, ch chan []interface{}, done chan bool) {
+func batchInserter(
+	cnf *config.Config,
+	conn *mongo.Client,
+	ch chan []interface{},
+	done chan bool,
+) {
 	var wg sync.WaitGroup
 	batchN := 0
 	for batchData := range ch {
@@ -127,6 +132,38 @@ func batchInserter(cnf *config.Config, conn *mongo.Client, ch chan []interface{}
 
 	wg.Wait()
 	done <- true
+}
+func batchInserterWorkerQueue(
+	cnf *config.Config,
+	conn *mongo.Client,
+	ch chan []interface{},
+	done chan bool,
+	maxWorkers int,
+) {
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go workerRun(ch, &wg, func(data []interface{}) {
+			insertToMongoNonWg(
+				cnf,
+				conn,
+				data,
+			)
+		})
+	}
+	wg.Wait()
+	done <- true
+}
+
+func workerRun(
+	dataPipes chan []interface{},
+	wg *sync.WaitGroup,
+	runnable func(data []interface{}),
+) {
+	for data := range dataPipes {
+		runnable(data)
+	}
+	wg.Done()
 }
 
 func insertToMongo(
@@ -145,6 +182,49 @@ func insertToMongo(
 	}
 	logger.Info(fmt.Sprintf("Insert successful for batch %d", batchN), zap.Int("length", len(insertResult.InsertedIDs)))
 	wg.Done()
+}
+
+func insertToMongoNonWg(
+	cnf *config.Config,
+	conn *mongo.Client,
+	data []interface{},
+) {
+	collection := conn.Database(cnf.DbName).Collection(cnf.CollectionName)
+	ctx, cancelInsert := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancelInsert()
+	_, insertErr := collection.InsertMany(ctx, data)
+	if insertErr != nil {
+		panic(insertErr)
+	}
+}
+
+func debugChannel(dataChannel chan []interface{}, doneChannel chan bool, intervalMs int) {
+	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+	for {
+		select {
+		case <-ticker.C:
+			logger.Info(
+				fmt.Sprintf("Data Channel Status: %d/%d", len(dataChannel), 30),
+			)
+		case <-doneChannel:
+			logger.Info("Loop complete, terminating debugChannel")
+			return
+		}
+	}
+}
+
+func createIndex(f []config.Field, collection *mongo.Collection) {
+	indexes := []mongo.IndexModel{}
+	for _, field := range f {
+		if field.Index {
+			indexes = append(indexes, mongo.IndexModel{
+				Keys: bson.M{field.Name: 1},
+			})
+		}
+	}
+	if len(indexes) > 0 {
+		collection.Indexes().CreateMany(context.TODO(), indexes)
+	}
 }
 
 func main() {
@@ -192,8 +272,12 @@ func main() {
 	dataChannel := make(chan []interface{}, 30)
 	doneChannel := make(chan bool)
 
+	collection := conn.Database(cnf.DbName).Collection(cnf.CollectionName)
+	createIndex(cnf.Fields, collection)
+	go debugChannel(dataChannel, doneChannel, 100)
 	go batchGenerator(&cnf, dataChannel)
-	go batchInserter(&cnf, conn, dataChannel, doneChannel)
+	// go batchInserter(&cnf, conn, dataChannel, doneChannel)
+	go batchInserterWorkerQueue(&cnf, conn, dataChannel, doneChannel, 5)
 
 	<-doneChannel
 	logger.Info(

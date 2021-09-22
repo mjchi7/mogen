@@ -40,6 +40,7 @@ type Field struct {
 	Generator string
 	Name      string
 	Data      map[string]interface{}
+	Index     bool
 }
 
 // Name generator

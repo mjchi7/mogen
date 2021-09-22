@@ -1,7 +1,7 @@
 host: localhost
 dbName: mogen
 collectionName: outletProjection
-nRows: 2000000
+nRows: 500
 fields:
   - generator: name
     name: firstName
@@ -28,6 +28,11 @@ fields:
         - "Tham"
         - "Beatric"
   - generator: bool
-    name: isActive
+    name: isActiveIndexed
+    index: true
+    data:
+      trueWeight: 98
+  - generator: bool
+    name: isActiveNonIndexed
     data:
       trueWeight: 98
